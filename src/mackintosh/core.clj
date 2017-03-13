@@ -29,20 +29,56 @@
      (doall
       (csv/read-csv in-file)))))
 
+(defn index-for
+  [header column-name]
+  (.indexOf header column-name))
+
 (defn get-indices
   [indices row]
-  (map #(convert-key (nth row %)) indices))
+  (map (partial nth row) indices))
 
-(defn group-by-factors
-  [data factor-indices]
-  (group-by #(str/join separator (get-indices factor-indices %)) data))
+(defn group-by-columns
+  [header data column-names]
+  (let [indices (map (partial index-for header) column-names)]
+    (group-by #(str/join separator (get-indices indices %)) data)))
+
+
+
+(defn frequencies-for-column
+  [all-data column-index prefix suffices]
+  (letfn [(per-suffix [suffix]
+            (let [data-key (str/join separator [prefix suffix])
+                  rows (get all-data data-key)
+                  specific-data (map #(nth % column-index) rows)
+                  freqs (frequencies specific-data)]
+              {data-key (frequencies specific-data)}))]
+    (map per-suffix suffices)))
+
+(defn pretty-print
+  [list-of-freqs]
+  (->> list-of-freqs
+       (map (fn [freqs]
+              (let [data-key (first (keys freqs))
+                    content (get freqs data-key)]
+                (str/join "\t"
+                          (concat
+                           [data-key]
+                           (map #(format "%s: %2d" (first %) (second %)) content)
+                           [(format "Total: %d" (reduce + (map second content)))])))))
+       (str/join "\n")
+       (println)))
 
 (defn -main
   ([] (-main "mackintosh.csv"))
   ([filename]
-   (let [[headers data] (read-csv filename)
-         tune-type-index (.indexOf headers "Type")]
-     (group-by-factors data (map #(.indexOf headers %) ["Type" "Book"])))))
+   (let [[header data] (read-csv filename)
+         data-by-type (group-by-columns header data ["Type" "Book"])
+         syncopation-index (index-for header "Syncopation?")
+         frequency-list (frequencies-for-column data-by-type syncopation-index "Reel" ["Mackintosh-1" "Mackintosh-2"])]
+     (pretty-print frequency-list))))
 
 
-;;C-c M-e (println (str/join "\n" (with-counts (sort (keys +result+)) +result+)))
+#_ (
+    {"Reel::Mackintosh-1" {false 8, true 9}}
+    {"Reel::Mackintosh-2" {true 19, false 3}}
+    )
